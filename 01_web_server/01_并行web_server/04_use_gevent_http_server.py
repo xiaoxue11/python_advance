@@ -1,0 +1,65 @@
+import socket
+import re
+import gevent
+from gevent import monkey
+
+monkey.patch_all()
+
+EOL1 = b'\n\n'
+EOL2 = b'\n\r\n'
+
+def serve_client(new_client_socket):
+    # receive client request
+    request = b''
+    while EOL1 not in request and EOL2 not in request:
+        request += new_client_socket.recv(1024)
+    # print(request)
+    request_lines = request.decode('utf-8').splitlines()
+    print(request_lines)
+    # GET /index.html HTTP/1.1:match example
+    ret = re.match(r'[^/]+(/[^ ]*)', request_lines[0])
+    file_name = ''
+    if ret:
+        file_name = ret.group(1)
+        if file_name == '/':
+            file_name = '/index.html'
+    
+    file_path = './html' + file_name
+    try:
+        f = open(file_path, 'rb')
+    except:
+        response = 'HTTP/1.1 404 NOT FOUND\r\n'
+        response += '\r\n'
+        response += '------file not found------'
+        new_client_socket.send(response.encode('utf-8'))
+    else:
+        # get response body
+        file_contend = f.read()
+        f.close()
+        # response the client request
+        # get response header
+        response = 'HTTP/1.1 200 OK\r\n'
+        response += '\r\n'
+        new_client_socket.send(response.encode('utf-8'))
+        new_client_socket.send(file_contend)
+
+    new_client_socket.close()
+
+
+def main():
+    # create tcp socket
+    tcp_server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp_server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # bind port
+    tcp_server_socket.bind(('',7890))
+    # set listen state
+    tcp_server_socket.listen(128)
+    # accept client message
+    while True:
+        new_client_socket, client_addr = tcp_server_socket.accept()
+        gevent.spawn(serve_client,new_client_socket)
+    # close socket
+    tcp_server_socket.close()
+
+if __name__ == '__main__':
+    main()
